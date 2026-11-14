@@ -14,9 +14,9 @@ using System.Windows.Media.Animation;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 
-[assembly: System.Reflection.AssemblyVersion("0.4.3.2")]
-[assembly: System.Reflection.AssemblyFileVersion("0.4.3.2")]
-[assembly: System.Reflection.AssemblyInformationalVersion("0.4.3.2")]
+[assembly: System.Reflection.AssemblyVersion("0.4.4.0")]
+[assembly: System.Reflection.AssemblyFileVersion("0.4.4.0")]
+[assembly: System.Reflection.AssemblyInformationalVersion("0.4.4")]
 [assembly: System.Reflection.AssemblyTitle("Pad Launcher")]
 [assembly: System.Reflection.AssemblyProduct("Pad Launcher")]
 [assembly: System.Runtime.Versioning.TargetFramework(".NETFramework,Version=v4.8",FrameworkDisplayName=".NET Framework 4.8")]
@@ -73,7 +73,10 @@ namespace PadLauncher {
     }
     public static class Entry {
         static Mutex instance;
-#if FIRST_START_TEST
+#if EMULATOR_DETECTION_TEST
+        const string InstanceName=@"Local\PadLauncher.EmulatorDetectionTest";
+        public const string AppName="Pad Launcher - Emulator detection test";
+#elif FIRST_START_TEST
         const string InstanceName=@"Local\PadLauncher.FirstStartupTest";
         public const string AppName="Pad Launcher - First startup test";
 #elif ARTWORK_TEST
@@ -88,7 +91,10 @@ namespace PadLauncher {
             string dataPath = Argument(args,"--data");
             if (!String.IsNullOrEmpty(dataPath)) Storage.Root = System.IO.Path.GetFullPath(dataPath);
             else {
-#if FIRST_START_TEST
+#if EMULATOR_DETECTION_TEST
+                Storage.Root=System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"PadLauncher.EmulatorDetectionTest.Data");
+                Storage.InitializePortable();
+#elif FIRST_START_TEST
                 Storage.Root=System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"PadLauncher.FirstStartupTest.Data");
                 Storage.InitializePortable();
 #elif ARTWORK_TEST
@@ -118,6 +124,12 @@ namespace PadLauncher {
                 } catch (Exception e) { File.WriteAllText(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "scan-result.txt"), e.ToString()); Environment.ExitCode = 1; }
                 return;
             }
+#if EMULATOR_DETECTION_TEST
+            if(args.Contains("--detection-report")) {
+                File.WriteAllText(System.IO.Path.Combine(Storage.Root,"emulator-detection-report.json"),Storage.Json().Serialize(EmulatorDetection.Scan(CancellationToken.None)));
+                return;
+            }
+#endif
             bool first;
             var showSignal=new EventWaitHandle(false,EventResetMode.AutoReset,InstanceName+".Show");
             var exitSignal=new EventWaitHandle(false,EventResetMode.AutoReset,InstanceName+".Exit");
@@ -166,6 +178,7 @@ namespace PadLauncher {
                 window.PrepareTray();
                 string resume=Argument(args,"--resume-update");
                 if(!String.IsNullOrEmpty(resume)) window.Dispatcher.BeginInvoke(DispatcherPriority.Loaded,new Action(() => window.ResumeAfterUpdate(resume)));
+                else window.Dispatcher.BeginInvoke(DispatcherPriority.Loaded,new Action(window.StartInitialSetup));
 #if ARTWORK_TEST
                 window.ShowOverlay();
 #endif
@@ -250,6 +263,7 @@ namespace PadLauncher {
 
         public Launcher(bool demoMode, bool renderPreview) {
             demo = demoMode; preview = renderPreview;
+            freshProfile=!File.Exists(System.IO.Path.Combine(Storage.Root,"settings.json")) && !File.Exists(System.IO.Path.Combine(Storage.Root,"library.json"));
             settings = Storage.Read<Settings>("settings.json") ?? new Settings();
             Title = Entry.AppName; Foreground = white;
             using(var iconStream=System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("PadLauncher.ico")) {
@@ -269,10 +283,6 @@ namespace PadLauncher {
             ApplyCarouselScale();
             SizeChanged+=(s,e) => { if(ActiveLayout=="grid") Render(false); };
             PreviewKeyDown += OnKey;
-            PreviewMouseRightButtonUp+=(sender,args) => {
-                args.Handled=true;
-                ShowHelpWindow();
-            };
             MouseWheel += (s,e) => { Move(e.Delta < 0 ? 1 : -1); };
             Closed += (s,e) => { updateCancellation.Cancel(); controllerTimer.Stop(); noticeTimer.Stop(); navigationSaveTimer.Stop(); Gamepad.StopNative(); Save(); };
             Closing += (s,e) => {
@@ -302,7 +312,7 @@ namespace PadLauncher {
             Gamepad.StopNative();
             var content=Content as FrameworkElement;
             if(content!=null) { content.Measure(new Size(1600,900)); content.Arrange(new Rect(0,0,1600,900)); content.UpdateLayout(); }
-            if(!preview) Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(() => RefreshLibrary()));
+            if(!preview && !TestEnvironment.EmulatorDetection && !NeedsInitialSetup) Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(() => RefreshLibrary()));
             Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(StartAutomaticUpdates));
         }
         public void ToggleOverlay() {
@@ -552,42 +562,7 @@ namespace PadLauncher {
                 Background=new SolidColorBrush(Color.FromRgb(13,25,34)),Foreground=white,FontFamily=FontFamily,
                 ShowInTaskbar=true,Topmost=true,Icon=Icon
             };
-            using(var theme=System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("SettingsTheme.xaml")) {
-                var resources=(ResourceDictionary)System.Windows.Markup.XamlReader.Load(theme);
-                dialog.Resources.MergedDictionaries.Add(resources);
-                dialog.Resources.Add(typeof(SettingsComboBox),resources[typeof(ComboBox)]);
-            }
-            string inputStyle=@"<Style xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml' TargetType='{x:Type INPUT}'>
-                <Setter Property='Background' Value='#1C303D'/><Setter Property='Foreground' Value='#ECF3F2'/>
-                <Setter Property='BorderBrush' Value='#3A5260'/><Setter Property='BorderThickness' Value='1'/>
-                <Setter Property='CaretBrush' Value='#A3F0CD'/><Setter Property='SelectionBrush' Value='#497D75'/>
-                <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='{x:Type INPUT}'>
-                    <Border x:Name='InputBorder' Background='{TemplateBinding Background}' BorderBrush='{TemplateBinding BorderBrush}' BorderThickness='{TemplateBinding BorderThickness}' CornerRadius='6' Padding='{TemplateBinding Padding}'>
-                        <ScrollViewer x:Name='PART_ContentHost' Focusable='False' HorizontalScrollBarVisibility='Hidden' VerticalScrollBarVisibility='Hidden'/>
-                    </Border>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property='IsMouseOver' Value='True'><Setter TargetName='InputBorder' Property='BorderBrush' Value='#64848E'/></Trigger>
-                        <Trigger Property='IsKeyboardFocusWithin' Value='True'><Setter TargetName='InputBorder' Property='BorderBrush' Value='#A3F0CD'/></Trigger>
-                        <Trigger Property='IsEnabled' Value='False'><Setter TargetName='InputBorder' Property='Opacity' Value='0.5'/></Trigger>
-                    </ControlTemplate.Triggers>
-                </ControlTemplate></Setter.Value></Setter>
-            </Style>";
-            var textStyle=(Style)System.Windows.Markup.XamlReader.Parse(inputStyle.Replace("INPUT","TextBox"));
-            textStyle.Setters.Add(new Setter(FrameworkElement.ContextMenuProperty,dialog.FindResource("PadTextMenu")));
-            dialog.Resources.Add(typeof(TextBox),textStyle);
-            var passwordStyle=(Style)System.Windows.Markup.XamlReader.Parse(inputStyle.Replace("INPUT","PasswordBox"));
-            passwordStyle.Setters.Add(new Setter(FrameworkElement.ContextMenuProperty,dialog.FindResource("PadPasswordMenu")));
-            dialog.Resources.Add(typeof(PasswordBox),passwordStyle);
-            dialog.Resources.Add(typeof(System.Windows.Controls.Primitives.ScrollBar),System.Windows.Markup.XamlReader.Parse(@"<Style xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml' TargetType='{x:Type ScrollBar}'>
-                <Setter Property='Width' Value='6'/><Setter Property='MinWidth' Value='6'/><Setter Property='Background' Value='Transparent'/>
-                <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='{x:Type ScrollBar}'>
-                    <Grid Background='Transparent'><Track x:Name='PART_Track' IsDirectionReversed='True' Orientation='Vertical' Minimum='{TemplateBinding Minimum}' Maximum='{TemplateBinding Maximum}' Value='{TemplateBinding Value}' ViewportSize='{TemplateBinding ViewportSize}'>
-                        <Track.DecreaseRepeatButton><RepeatButton Command='{x:Static ScrollBar.PageUpCommand}' Opacity='0' Focusable='False'/></Track.DecreaseRepeatButton>
-                        <Track.Thumb><Thumb x:Name='MintThumb' Background='#A3F0CD' MinHeight='24'><Thumb.Template><ControlTemplate TargetType='{x:Type Thumb}'><Border Background='{TemplateBinding Background}' CornerRadius='3'/></ControlTemplate></Thumb.Template></Thumb></Track.Thumb>
-                        <Track.IncreaseRepeatButton><RepeatButton Command='{x:Static ScrollBar.PageDownCommand}' Opacity='0' Focusable='False'/></Track.IncreaseRepeatButton>
-                    </Track></Grid>
-                </ControlTemplate></Setter.Value></Setter>
-            </Style>"));
+            ApplySettingsTheme(dialog);
             var layout=new StackPanel { Margin=new Thickness(28) };
             var listsLayout=new StackPanel {Margin=new Thickness(28)};
             var listsScroll=new ScrollViewer {Content=listsLayout,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled};
@@ -1144,6 +1119,7 @@ namespace PadLauncher {
             UpdateMissingArtworkList(missingCount,missingList,dialog);
             bool startupEnabled=false; try {startupEnabled=StartupSetting.Enabled;} catch {}
             var startupToggle=new CheckBox {Name="StartWithWindowsSetting",Content="Start with Windows",IsChecked=startupEnabled,Margin=new Thickness(0,18,0,12)};
+            startupToggle.IsEnabled=!TestEnvironment.EmulatorDetection;
             if(TestEnvironment.FirstStartup) startupToggle.IsEnabled=false;
             startupToggle.Click+=(s,e) => {try {StartupSetting.Set(startupToggle.IsChecked==true);} catch(Exception error) {startupToggle.IsChecked=startupEnabled; ThemedMessage.Show(dialog,error.Message,"Windows startup");}}; systemLayout.Children.Add(startupToggle);
             Func<string,string,StackPanel> addIntegration=(title,name) => {
@@ -1311,6 +1287,8 @@ namespace PadLauncher {
             getKey.Click+=(s,e) => Process.Start(new ProcessStartInfo("https://www.steamgriddb.com/profile/preferences/api") {UseShellExecute=true});
             apiButtons.Children.Add(saveKey); apiButtons.Children.Add(clearKey); apiButtons.Children.Add(getKey); systemLayout.Children.Add(apiButtons); systemLayout.Children.Add(apiStatus);
             systemLayout.Children.Add(repairPaths);
+            var restartSetup=new Button {Name="RestartSetupWizard",Content="Restart setup…",HorizontalAlignment=HorizontalAlignment.Left,Padding=new Thickness(12,7,12,7),Margin=new Thickness(0,20,0,8)};
+            restartSetup.Click+=(s,e) => ShowSetupWizard(true); systemLayout.Children.Add(restartSetup);
             AddUpdateSettings(systemLayout);
             };
             rebuild();

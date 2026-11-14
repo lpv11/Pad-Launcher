@@ -14,7 +14,7 @@ namespace PadLauncher {
             Storage.Write("settings.json",next); settings=next; ApplyLibrary();
         }
         FrameworkElement CreateHiddenGamesSettings(Action rebuild) {
-            var section=new Expander {Name="HiddenGamesSection",Header="Hidden games",Foreground=white,FontSize=14,Margin=new Thickness(0,16,0,0),IsExpanded=hiddenGamesExpanded};
+            var section=new Expander {Name="HiddenGamesSection",Header="Hide games",Foreground=white,FontSize=14,Margin=new Thickness(0,16,0,0),IsExpanded=hiddenGamesExpanded};
             section.Expanded+=(s,e) => hiddenGamesExpanded=true;
             section.Collapsed+=(s,e) => hiddenGamesExpanded=false;
             var panel=new StackPanel {Margin=new Thickness(12,8,12,12)}; section.Content=panel;
@@ -55,7 +55,7 @@ namespace PadLauncher {
             var save=new Button {Name="SaveHiddenGames",Content="Save changes",HorizontalAlignment=HorizontalAlignment.Left,Margin=new Thickness(0,10,0,0),Padding=new Thickness(12,7,12,7),Background=mint,Foreground=System.Windows.Media.Brushes.Black};
             save.Click+=(s,e) => {
                 try {SetHiddenGames(selected); rebuild();}
-                catch(Exception error) {ThemedMessage.Show(error.Message,"Hidden games");}
+                catch(Exception error) {ThemedMessage.Show(error.Message,"Hide games");}
             };
             panel.Children.Add(save); return section;
         }

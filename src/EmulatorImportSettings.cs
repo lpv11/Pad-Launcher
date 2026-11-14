@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 
 namespace PadLauncher {
     public partial class Launcher {
@@ -57,6 +58,8 @@ namespace PadLauncher {
             var review=new Button {Name="ReviewEmulatorImportGames",Content="Review selected sources",Padding=new Thickness(12,7,12,7),IsEnabled=false}; reviewActions.Children.Add(review);
             var sourceAll=new Button {Content="Select all sources",Padding=new Thickness(12,7,12,7),Margin=new Thickness(8,0,0,0)}; reviewActions.Children.Add(sourceAll);
             var status=Label("Load sources to begin.",12,muted); status.Name="EmulatorImportStatus"; status.TextWrapping=TextWrapping.Wrap; status.Margin=new Thickness(0,0,0,8); header.Children.Add(status);
+            var duplicateNote=Label("Reimporting games already added reuses their existing entries without creating duplicates.",12,new SolidColorBrush(Color.FromRgb(255,218,106)));
+            duplicateNote.Name="ImportNoDuplicatesNote"; duplicateNote.TextWrapping=TextWrapping.Wrap; duplicateNote.Margin=new Thickness(0,0,0,8); header.Children.Add(duplicateNote);
 
             var footer=new StackPanel {Margin=new Thickness(0,12,0,0)}; DockPanel.SetDock(footer,Dock.Bottom); root.Children.Add(footer);
             var destinations=new List<KeyValuePair<string,string>> {
@@ -76,11 +79,16 @@ namespace PadLauncher {
             var reviewArea=new DockPanel(); root.Children.Add(reviewArea);
             var selectionBar=new StackPanel {Orientation=Orientation.Horizontal,Margin=new Thickness(0,0,0,6),Visibility=Visibility.Collapsed}; DockPanel.SetDock(selectionBar,Dock.Top); reviewArea.Children.Add(selectionBar);
             var all=new Button {Content="Select all games",Padding=new Thickness(12,7,12,7)}; selectionBar.Children.Add(all);
-            var count=Label("",12,muted); count.Margin=new Thickness(12,0,0,0); selectionBar.Children.Add(count);
+            var hideAdded=new Button {Name="HideAddedEmulatorImportGames",Content="Hide already added games",Padding=new Thickness(12,7,12,7),Margin=new Thickness(8,0,0,0)}; selectionBar.Children.Add(hideAdded);
+            var count=Label("",12,muted); count.Name="EmulatorImportSelectionCount"; count.Margin=new Thickness(12,0,0,0); selectionBar.Children.Add(count);
             var gameRows=new StackPanel(); reviewArea.Children.Add(new ScrollViewer {Content=gameRows,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled});
+            var hiddenNotice=Label("All reviewed games are already added. Hidden entries keep their selection.",12,muted); hiddenNotice.Name="EmulatorImportHiddenNotice"; hiddenNotice.TextWrapping=TextWrapping.Wrap; hiddenNotice.Visibility=Visibility.Collapsed;
             var nameFields=new List<TextBox>();
             var sourceBoxes=new Dictionary<EmulatorImportSource,CheckBox>(); var gameBoxes=new Dictionary<EmulatorImportGame,CheckBox>();
             var reviewedSources=new List<EmulatorImportSource>(); string loadedLocation=null;
+            bool hideAlreadyAdded=false;
+            var addedBoxes=new HashSet<CheckBox>();
+            var groupRows=new Dictionary<UIElement,List<CheckBox>>();
             var lifetime=new CancellationTokenSource(); bool closed=false,busy=false;
             dialog.Closed+=(s,e) => {closed=true; lifetime.Cancel(); if(!busy) lifetime.Dispose();};
             Func<EmulatorImportDefinition> saved=() => definitions.FirstOrDefault(d => d.Id==(string)savedPicker.SelectedValue);
@@ -104,8 +112,16 @@ namespace PadLauncher {
             }
             Action refreshDestination=() => {bool newList=String.IsNullOrEmpty(destination.SelectedValue as string); separate.IsEnabled=newList && reviewedSources.Count>1; separate.Visibility=separate.IsEnabled ? Visibility.Visible : Visibility.Collapsed; listName.Visibility=newList && !(separate.IsEnabled && separate.IsChecked==true) ? Visibility.Visible : Visibility.Collapsed; listCaption.Visibility=listName.Visibility;};
             destination.SelectionChanged+=(s,e) => refreshDestination(); separate.Click+=(s,e) => refreshDestination(); refreshDestination();
-            Action updateCount=() => {int selected=gameBoxes.Values.Count(b => b.IsChecked==true); count.Text=selected+" selected"; import.IsEnabled=selected>0 && !busy;};
-            Action clearReview=() => {gameRows.Children.Clear(); gameBoxes.Clear(); nameFields.Clear(); reviewedSources.Clear(); selectionBar.Visibility=Visibility.Collapsed; updateCount(); refreshDestination();};
+            Action updateCount=() => {
+                foreach(var box in gameBoxes.Values) box.Visibility=hideAlreadyAdded && addedBoxes.Contains(box) ? Visibility.Collapsed : Visibility.Visible;
+                foreach(var group in groupRows) group.Key.Visibility=group.Value.Any(box => box.Visibility==Visibility.Visible) ? Visibility.Visible : Visibility.Collapsed;
+                int selected=gameBoxes.Values.Count(b => b.IsChecked==true),hidden=gameBoxes.Values.Count(b => b.Visibility==Visibility.Collapsed);
+                count.Text=selected+" selected"+(hidden>0 ? " · "+hidden+" hidden" : ""); import.IsEnabled=selected>0 && !busy;
+                hiddenNotice.Visibility=gameBoxes.Count>0 && hidden==gameBoxes.Count ? Visibility.Visible : Visibility.Collapsed;
+            };
+            hideAdded.ToolTip="Filters the review list only. Hidden entries keep their selection.";
+            hideAdded.Click+=(s,e) => {hideAlreadyAdded=!hideAlreadyAdded; hideAdded.Content=hideAlreadyAdded ? "Show already added games" : "Hide already added games"; updateCount();};
+            Action clearReview=() => {gameRows.Children.Clear(); gameRows.Children.Add(hiddenNotice); gameBoxes.Clear(); addedBoxes.Clear(); groupRows.Clear(); nameFields.Clear(); reviewedSources.Clear(); selectionBar.Visibility=Visibility.Collapsed; updateCount(); refreshDestination();};
             Action<bool> setBusy=value => {busy=value; header.IsEnabled=!value; reviewArea.IsEnabled=!value; destination.IsEnabled=!value; separate.IsEnabled=!value && String.IsNullOrEmpty(destination.SelectedValue as string) && reviewedSources.Count>1; listName.IsEnabled=!value; updateCount();};
             location.TextChanged+=(s,e) => {loadedLocation=null; sourceBoxes.Clear(); sourceRows.Children.Clear(); review.IsEnabled=false; clearReview();};
             BindSelectionToggle(all,() => gameBoxes.Values,updateCount," games");
@@ -144,6 +160,7 @@ namespace PadLauncher {
                     foreach(var source in chosen) {
                         var games=batch.Games.Where(g => g.SourceId==source.Id).GroupBy(g => g.Key).Select(g => g.First()).OrderBy(g => g.Name,StringComparer.CurrentCultureIgnoreCase).ToList();
                         var caption=Label(source.Name+" ("+games.Count+")",14,mint); caption.TextWrapping=TextWrapping.Wrap; caption.Margin=new Thickness(0,8,0,6); gameRows.Children.Add(caption);
+                        var sourceGameBoxes=new List<CheckBox>(); groupRows[caption]=sourceGameBoxes;
                         foreach(var game in games) {
                             EmulatorGame existing; byPath.TryGetValue(game.Path,out existing);
                             bool ready=existing!=null || game.Problem==null;
@@ -158,6 +175,7 @@ namespace PadLauncher {
                             string core=existing==null ? game.CorePath : existing.CorePath ?? (config==null ? null : config.CorePath);
                             var detail=Label(game.Path+(String.IsNullOrEmpty(core) ? "" : " · Core: "+Path.GetFileName(core))+(ready ? "" : " · "+game.Problem),11,muted); detail.TextWrapping=TextWrapping.Wrap; row.Children.Add(detail);
                             var box=new CheckBox {Content=row,IsEnabled=ready,IsChecked=ready && !excluded.Contains(game.Key),Margin=new Thickness(0,4,0,6)}; box.Checked+=(a,b) => updateCount(); box.Unchecked+=(a,b) => updateCount(); gameBoxes.Add(game,box); gameRows.Children.Add(box);
+                            sourceGameBoxes.Add(box); if(existing!=null) addedBoxes.Add(box);
                         }
                     }
                     var found=new HashSet<string>(batch.Games.Select(g => g.Path),StringComparer.OrdinalIgnoreCase);
@@ -215,6 +233,8 @@ namespace PadLauncher {
             public List<TextBox> nameFields=new List<TextBox>();
             public List<EmulatorImportSource> reviewedSources=new List<EmulatorImportSource>();
             public List<UIElement> reviewRows=new List<UIElement>();
+            public HashSet<CheckBox> addedBoxes=new HashSet<CheckBox>();
+            public Dictionary<UIElement,List<CheckBox>> groupRows=new Dictionary<UIElement,List<CheckBox>>();
             public SettingsComboBox destination;
             public TextBox listName;
             public TextBlock statusText;
@@ -229,13 +249,18 @@ namespace PadLauncher {
             var content=new StackPanel(); root.Children.Add(new ScrollViewer {Content=content,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled});
             var title=Label("Import emulator libraries",23,white); title.Margin=new Thickness(0,0,0,8); content.Children.Add(title);
             var note=Label("Select each emulator's sources, review its games, and choose a destination list for each.",12,muted); note.TextWrapping=TextWrapping.Wrap; content.Children.Add(note);
+            var duplicateNote=Label("Reimporting games already added reuses their existing entries without creating duplicates.",12,new SolidColorBrush(Color.FromRgb(255,218,106)));
+            duplicateNote.Name="ImportNoDuplicatesNote"; duplicateNote.TextWrapping=TextWrapping.Wrap; duplicateNote.Margin=new Thickness(0,8,0,0); content.Children.Add(duplicateNote);
             var actionRow=new WrapPanel {Orientation=Orientation.Horizontal,Margin=new Thickness(0,12,0,8)}; content.Children.Add(actionRow);
             var review=new Button {Name="ReviewEmulatorImportAll",Content="Review selected sources",Padding=new Thickness(12,7,12,7),IsEnabled=false}; actionRow.Children.Add(review);
             var selectAll=new Button {Name="SelectAllEmulatorImportSources",Content="Select all sources",Padding=new Thickness(12,7,12,7),Margin=new Thickness(8,0,0,0)}; actionRow.Children.Add(selectAll);
+            bool hideAlreadyAdded=false;
+            var hideAdded=new Button {Name="HideAddedEmulatorImportAllGames",Content="Hide already added games",Padding=new Thickness(12,7,12,7),Margin=new Thickness(8,0,0,0),ToolTip="Filters the review list only. Hidden entries keep their selection."}; actionRow.Children.Add(hideAdded);
 
             var count=Label("",12,muted); count.Name="ImportAllSelectionCount"; count.Margin=new Thickness(12,0,0,0); actionRow.Children.Add(count);
             var status=Label("Finding import sources…",12,muted); status.Name="EmulatorImportAllStatus"; status.TextWrapping=TextWrapping.Wrap; status.Margin=new Thickness(0,0,0,10); content.Children.Add(status);
             var reviewArea=new StackPanel {Margin=new Thickness(0,8,0,0)}; content.Children.Add(reviewArea);
+            var hiddenNotice=Label("All reviewed games are already added. Hidden entries keep their selection.",12,muted); hiddenNotice.Name="EmulatorImportAllHiddenNotice"; hiddenNotice.TextWrapping=TextWrapping.Wrap; hiddenNotice.Visibility=Visibility.Collapsed; reviewArea.Children.Add(hiddenNotice);
             var import=new Button {Name="CommitEmulatorImportAll",Content="Import selected games",Padding=new Thickness(12,7,12,7),IsEnabled=false};
             var cancel=new Button {Content="Cancel",Padding=new Thickness(12,7,12,7),Margin=new Thickness(8,0,0,0),IsCancel=true};
             footer.Children.Add(import); footer.Children.Add(cancel);
@@ -244,17 +269,26 @@ namespace PadLauncher {
             Func<int> selectedGames=() => entries.Sum(en => en.gameBoxes.Values.Count(box => box.IsChecked==true));
             Func<int> selectedSources=() => entries.Sum(en => en.sourceBoxes.Values.Count(box => box.IsChecked==true));
             Action updateCount=() => {
+                foreach(var entry in entries) {
+                    foreach(var box in entry.gameBoxes.Values) box.Visibility=hideAlreadyAdded && entry.addedBoxes.Contains(box) ? Visibility.Collapsed : Visibility.Visible;
+                    foreach(var group in entry.groupRows) group.Key.Visibility=group.Value.Any(box => box.Visibility==Visibility.Visible) ? Visibility.Visible : Visibility.Collapsed;
+                }
                 int games=selectedGames();
                 int sources=selectedSources();
                 count.Text=sources==1 ? "1 source selected" : sources+" sources selected";
                 if(entries.Any(en => en.gameBoxes.Count>0)) count.Text+=" · "+games+(games==1 ? " game selected" : " games selected");
+                int hidden=entries.Sum(entry => entry.gameBoxes.Values.Count(box => box.Visibility==Visibility.Collapsed));
+                if(hidden>0) count.Text+=" · "+hidden+" hidden";
+                int reviewed=entries.Sum(entry => entry.gameBoxes.Count);
+                hiddenNotice.Visibility=reviewed>0 && hidden==reviewed ? Visibility.Visible : Visibility.Collapsed;
                 import.IsEnabled=games>0 && !busy;
             };
+            hideAdded.Click+=(s,e) => {hideAlreadyAdded=!hideAlreadyAdded; hideAdded.Content=hideAlreadyAdded ? "Show already added games" : "Hide already added games"; updateCount();};
             Func<bool> anyLoadedSource=() => entries.Any(en => en.sourceBoxes.Count>0);
             Action<bool> setBusy=value => {busy=value; foreach(var entry in entries) entry.panel.IsEnabled=!value; selectAll.IsEnabled=!value; review.IsEnabled=!value && anyLoadedSource(); updateCount();};
             Action<EmulatorImportAllEntry> clearReview=target => {
                 foreach(var row in target.reviewRows) reviewArea.Children.Remove(row);
-                target.reviewRows.Clear(); target.gameBoxes.Clear(); target.nameFields.Clear(); target.reviewedSources.Clear();
+                target.reviewRows.Clear(); target.gameBoxes.Clear(); target.addedBoxes.Clear(); target.groupRows.Clear(); target.nameFields.Clear(); target.reviewedSources.Clear();
                 updateCount();
             };
             Func<EmulatorImportAllEntry,Task> loadEntry=async entry => {
@@ -345,10 +379,12 @@ namespace PadLauncher {
                         var current=(config==null ? new List<EmulatorGame>() : config.Games ?? new List<EmulatorGame>());
                         var byPath=current.Where(g => !String.IsNullOrEmpty(g.Path)).GroupBy(g => g.Path,StringComparer.OrdinalIgnoreCase).ToDictionary(g => g.Key,g => g.First(),StringComparer.OrdinalIgnoreCase);
                         var caption=Label(entry.preset.Name+" ("+batch.Games.Count+" games)",14,mint); caption.Margin=new Thickness(0,10,0,6); entry.reviewRows.Add(caption); reviewArea.Children.Add(caption);
+                        var emulatorGameBoxes=new List<CheckBox>(); entry.groupRows[caption]=emulatorGameBoxes;
                         foreach(var source in chosen) {
                             var games=batch.Games.Where(g => g.SourceId==source.Id).GroupBy(g => g.Key).Select(g => g.First()).OrderBy(g => g.Name,StringComparer.CurrentCultureIgnoreCase).ToList();
                             if(games.Count==0) continue;
-                            if(chosen.Count>1) {var sub=Label(source.Name+" ("+games.Count+")",13,mint); sub.Margin=new Thickness(0,6,0,4); entry.reviewRows.Add(sub); reviewArea.Children.Add(sub);}
+                            var sourceGameBoxes=new List<CheckBox>();
+                            if(chosen.Count>1) {var sub=Label(source.Name+" ("+games.Count+")",13,mint); sub.Margin=new Thickness(0,6,0,4); entry.reviewRows.Add(sub); reviewArea.Children.Add(sub); entry.groupRows[sub]=sourceGameBoxes;}
                             foreach(var game in games) {
                                 EmulatorGame existing; byPath.TryGetValue(game.Path,out existing);
                                 bool ready=existing!=null || game.Problem==null;
@@ -366,6 +402,7 @@ namespace PadLauncher {
                                 var box=new CheckBox {Content=row,IsEnabled=ready,IsChecked=ready,Margin=new Thickness(0,4,0,6)};
                                 box.Checked+=(a,b) => updateCount(); box.Unchecked+=(a,b) => updateCount();
                                 entry.gameBoxes.Add(game,box);
+                                emulatorGameBoxes.Add(box); sourceGameBoxes.Add(box); if(existing!=null) entry.addedBoxes.Add(box);
                                 entry.reviewRows.Add(box); reviewArea.Children.Add(box);
                             }
                         }

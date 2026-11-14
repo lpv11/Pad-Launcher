@@ -67,6 +67,7 @@ namespace PadLauncher {
                 if(args.Source==tabs && tabs.SelectedIndex>=0) emulatorTabIndex=tabs.SelectedIndex;
             };
             root.Children.Add(tabs);
+            AddEmulatorDetectionSettings(settingsPanel,dialog,rebuild);
             var importAll=new Button {Name="ImportEmulatorLibrariesAll",Content="Import all emulator libraries…",HorizontalAlignment=HorizontalAlignment.Left,Padding=new Thickness(12,7,12,7),Margin=new Thickness(0,12,0,0)};
             gamesPanel.Children.Add(importAll);
             var importAllNote=Label("Configure your emulators and their game libraries first. Imports may scan game folders configured in the emulators; Pad Launcher's ROM folder setting is not used.",12,muted);

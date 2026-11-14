@@ -4,6 +4,16 @@ Research checked against upstream source on 2026-11-10. Pad Launcher supports ex
 
 ## Recommended methods
 
+### Installed-executable detection (2026-11-14)
+
+Executable detection is available in regular Settings and the optional setup wizard. It checks both user/machine and 32/64-bit **App Paths** and **Uninstall** registrations, relevant Start-menu shortcut targets, and emulator-named folders immediately under Program Files and local application locations. It checks known executable filenames, including common alternate builds, without launching them, writing registrations, scanning ROMs or searching entire drives. This is candidate discovery, not proof that an emulator was installed by an installer: portable applications with shortcuts can also appear. Paths outside these sources, renamed binaries, Microsoft Store packages and arbitrary portable folders can be missed; manual Browse remains available.
+
+The review screen retains distinct installations, combines duplicate evidence, and leaves already-configured emulators unchecked. Applying checked choices uses normal executable validation and library-location detection; games, ROM folders, arguments and unchecked paths are retained. No games are imported automatically. A separate `-EmulatorDetectionTest` build remains available with its own data folder and instance, with app updates and Windows startup changes disabled. First-run setup is shown automatically only for fresh profiles; existing profiles can open it from System without being forced through setup after an upgrade.
+
+Microsoft documents per-user/per-machine [App Paths](https://learn.microsoft.com/en-us/windows/win32/shell/app-registration), [installer registration values](https://learn.microsoft.com/en-us/windows/win32/msi/uninstall-registry-key), and [Shell Link targets](https://learn.microsoft.com/en-us/windows/win32/shell/links). PPSSPP's upstream [Windows installer](https://github.com/hrydgard/ppsspp/blob/master/ppsspp.iss) demonstrates installer-created shortcuts and a DisplayIcon that can name the 32-bit executable even when the 64-bit executable is installed; discovery therefore also probes known sibling filenames. Fixtures cover all supported aliases and this PPSSPP case; real installed-emulator coverage remains unverified on the current portable-only setup.
+
+### Game-library sources
+
 Changing the saved emulator executable re-detects its library/configuration location using the adapters below. Saving an unchanged executable preserves a manually selected library location. ROM folders, imported games and saved import provenance are preserved; clearing the executable clears its library-location override.
 
 | Emulator | Preferred discovery | Important limits |

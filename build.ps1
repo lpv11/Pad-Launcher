@@ -12,11 +12,17 @@ $appSources += (Join-Path $PSScriptRoot 'src\ListToolsSettings.cs')
 $appSources += (Join-Path $PSScriptRoot 'src\UpdateSettings.cs')
 $appSources += (Join-Path $PSScriptRoot 'src\UpdateSession.cs')
 $librarySources += (Join-Path $PSScriptRoot 'src\AppUpdates.cs')
+$librarySources += (Join-Path $PSScriptRoot 'src\EmulatorDetection.cs')
+$appSources += (Join-Path $PSScriptRoot 'src\EmulatorDetectionSettings.cs')
+$appSources += (Join-Path $PSScriptRoot 'src\SettingsAppearance.cs')
+$appSources += (Join-Path $PSScriptRoot 'src\SetupWizard.cs')
+$appSources += (Join-Path $PSScriptRoot 'src\LayoutPreviews.cs')
 $refs += '/resource:' + (Join-Path $PSScriptRoot 'src\SettingsTheme.xaml') + ',SettingsTheme.xaml'
 $artworkTest = $args -contains '-ArtworkTest'
 $firstStartupTest = $args -contains '-FirstStartupTest'
-$executableName = if($firstStartupTest) { 'PadLauncher.FirstStartupTest' } elseif($artworkTest) { 'PadLauncher.ArtworkTest' } else { 'PadLauncher' }
-$defines = if($firstStartupTest) { @('/define:FIRST_START_TEST') } elseif($artworkTest) { @('/define:ARTWORK_TEST') } else { @() }
+$emulatorDetectionTest = $args -contains '-EmulatorDetectionTest'
+$executableName = if($emulatorDetectionTest) { 'PadLauncher.EmulatorDetectionTest' } elseif($firstStartupTest) { 'PadLauncher.FirstStartupTest' } elseif($artworkTest) { 'PadLauncher.ArtworkTest' } else { 'PadLauncher' }
+$defines = if($emulatorDetectionTest) { @('/define:EMULATOR_DETECTION_TEST') } elseif($firstStartupTest) { @('/define:FIRST_START_TEST') } elseif($artworkTest) { @('/define:ARTWORK_TEST') } else { @() }
 $stagedExecutable = Join-Path $out ($executableName + '.build.exe')
 $iconPath = Join-Path $PSScriptRoot 'assets\PadLauncher.ico'
 & $compiler /nologo /target:winexe /platform:x64 /optimize+ $defines ('/win32manifest:' + (Join-Path $PSScriptRoot 'src\App.manifest')) ('/win32icon:' + $iconPath) ('/resource:' + $iconPath + ',PadLauncher.ico') ('/out:' + $stagedExecutable) $refs $librarySources $appSources
@@ -25,6 +31,18 @@ $builtExecutable = Get-Item $stagedExecutable
 $newestSource = @($librarySources + $appSources + (Join-Path $PSScriptRoot 'src\App.manifest')) | Get-Item | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
 if ($builtExecutable.LastWriteTimeUtc -lt $newestSource.LastWriteTimeUtc) { throw 'The executable is older than the source. Close any running launcher and rebuild.' }
 if ($args -contains '-Test') {
+    & $compiler /nologo /target:exe /platform:x64 /main:SetupWizardTests ('/out:' + (Join-Path $out 'SetupWizardTests.exe')) $refs $librarySources $appSources (Join-Path $PSScriptRoot 'tests\SetupWizardTests.cs')
+    if ($LASTEXITCODE -ne 0) { throw 'Setup wizard test build failed.' }
+    & (Join-Path $out 'SetupWizardTests.exe')
+    if ($LASTEXITCODE -ne 0) { throw 'Setup wizard tests failed.' }
+    & $compiler /nologo /target:exe /platform:x64 ('/out:' + (Join-Path $out 'EmulatorDetectionTests.exe')) $refs $librarySources (Join-Path $PSScriptRoot 'tests\EmulatorDetectionTests.cs')
+    if ($LASTEXITCODE -ne 0) { throw 'Emulator detection test build failed.' }
+    & (Join-Path $out 'EmulatorDetectionTests.exe')
+    if ($LASTEXITCODE -ne 0) { throw 'Emulator detection tests failed.' }
+    & $compiler /nologo /target:exe /platform:x64 /main:EmulatorDetectionUiTests ('/out:' + (Join-Path $out 'EmulatorDetectionUiTests.exe')) $refs $librarySources $appSources (Join-Path $PSScriptRoot 'tests\EmulatorDetectionUiTests.cs')
+    if ($LASTEXITCODE -ne 0) { throw 'Emulator detection UI test build failed.' }
+    & (Join-Path $out 'EmulatorDetectionUiTests.exe')
+    if ($LASTEXITCODE -ne 0) { throw 'Emulator detection UI tests failed.' }
     & $compiler /nologo /target:exe /platform:x64 /main:UpdateSessionTests ('/out:' + (Join-Path $out 'UpdateSessionTests.exe')) $refs $librarySources $appSources (Join-Path $PSScriptRoot 'tests\UpdateSessionTests.cs')
     if ($LASTEXITCODE -ne 0) { throw 'Update session test build failed.' }
     & (Join-Path $out 'UpdateSessionTests.exe')

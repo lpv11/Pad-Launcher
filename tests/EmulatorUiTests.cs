@@ -16,6 +16,24 @@ class EmulatorUiTests {
         for(int i=0;i<VisualTreeHelper.GetChildrenCount(root);i++) {var child=Find(VisualTreeHelper.GetChild(root,i),name); if(child!=null) return child;} return null;
     }
     static void Layout(FrameworkElement root) {root.Measure(new Size(780,680)); root.Arrange(new Rect(0,0,780,680)); root.UpdateLayout();}
+    static System.Collections.Generic.IEnumerable<DependencyObject> ImportChildren(DependencyObject root) {
+        yield return root;
+        foreach(var item in LogicalTreeHelper.GetChildren(root)) {var child=item as DependencyObject; if(child!=null) foreach(var next in ImportChildren(child)) yield return next;}
+    }
+    static void CheckAddedFilter(FrameworkElement content,string buttonName,int expectedAdded) {
+        var button=(Button)Find(content,buttonName);
+        var boxes=ImportChildren(content).OfType<CheckBox>().Where(box => box.Content is StackPanel).ToList();
+        var added=boxes.Where(box => ((StackPanel)box.Content).Children.OfType<TextBlock>().Any(text => text.Text.Contains("already added"))).ToList();
+        var selected=boxes.Select(box => box.IsChecked).ToArray();
+        Check(button!=null && added.Count==expectedAdded,"Import review identifies the already-added rows for filtering");
+        var note=(TextBlock)Find(content,"ImportNoDuplicatesNote");
+        Check(note!=null && note.Text.Contains("without creating duplicates") && ((SolidColorBrush)note.Foreground).Color==Color.FromRgb(255,218,106),"Import review explains duplicate prevention in yellow");
+        button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Check(added.All(box => box.Visibility==Visibility.Collapsed) && boxes.Except(added).All(box => box.Visibility==Visibility.Visible),"Hide already added collapses existing rows and retains new games");
+        Check(boxes.Select(box => box.IsChecked).SequenceEqual(selected),"Hiding existing games preserves their selection and import state");
+        button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Check(boxes.All(box => box.Visibility==Visibility.Visible) && boxes.Select(box => box.IsChecked).SequenceEqual(selected),"Toggling the filter off restores rows without changing selections");
+    }
     static bool RunImport(Window owner,FrameworkElement content,bool update) {
         int stage=0; bool done=false; var started=DateTime.UtcNow;
         var timer=new DispatcherTimer {Interval=TimeSpan.FromMilliseconds(30)};
@@ -35,6 +53,7 @@ class EmulatorUiTests {
             if(stage==1 && review!=null && review.IsEnabled) {stage=2; review.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); return;}
             if(stage==2 && commit!=null && commit.IsEnabled) {
                 stage=3;
+                CheckAddedFilter(wizardContent,"HideAddedEmulatorImportGames",update ? 1 : 0);
                 if(!update) {
                     ((ComboBox)Find(wizardContent,"EmulatorImportDestination")).SelectedValue="";
                     ((TextBox)Find(wizardContent,"EmulatorImportListName")).Text="Imported test list";
@@ -85,6 +104,7 @@ class EmulatorUiTests {
             }
             if(stage==22 && commit!=null && commit.IsEnabled) {
                 Check(((TextBlock)Find(wizardContent,"ImportAllSelectionCount")).Text.EndsWith("2 games selected"),"Reviewing bulk sources twice keeps one row per game");
+                CheckAddedFilter(wizardContent,"HideAddedEmulatorImportAllGames",2);
                 var destination=(ComboBox)Find(wizardContent,"ImportAllDestination_retroarch"); var listName=(TextBox)Find(wizardContent,"ImportAllListName_retroarch");
                 if(destination!=null && listName!=null) {destination.SelectedValue=""; listName.Text="Imported all test list";}
                 stage=3; return;

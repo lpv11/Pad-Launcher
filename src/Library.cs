@@ -9,6 +9,15 @@ using Microsoft.Win32;
 
 namespace PadLauncher {
     public static class TestEnvironment {
+        public static bool EmulatorDetection {
+            get {
+#if EMULATOR_DETECTION_TEST
+                return true;
+#else
+                return false;
+#endif
+            }
+        }
         public static bool FirstStartup {
             get {
 #if FIRST_START_TEST
@@ -290,6 +299,9 @@ namespace PadLauncher {
         public string AngledSizing {get;set;}
     }
     public class Settings {
+        public bool SetupWizardShown {get;set;}
+        public bool SetupWizardCompleted {get;set;}
+        public int SetupWizardPage {get;set;}
         public List<string> HiddenGameIds {get;set;}
         public bool AutoUpdate {get;set;}
         public Dictionary<string,ListLayout> ListLayouts {get;set;}
@@ -342,7 +354,7 @@ namespace PadLauncher {
         public string UbisoftLauncherPath {get;set;}
         public string EaLauncherPath {get;set;}
         public bool SteamGridDbEnabled { get; set; }
-        public Settings() { ShowListGameCount=true; RemoveMissingEmulatorGames=true; SkipEmptyLists=true; LeftStickSpeed=1; RightStickSpeed=3; VerticalListSwitch="off"; ButtonPrompts = "PlayStation"; ShowGameTitle = true; ShowCollectionName = true; OpenMonitor = "cursor"; DefaultCollectionId="remember"; CarouselScale=1; CarouselLayout="angled"; AngledPanelSizing="fixed"; GridColumns=5; GridRows=2; EpicEnabled=true; GogEnabled=true; EaEnabled=true; UbisoftEnabled=true; RockstarEnabled=true; SteamGridDbEnabled=true; }
+        public Settings() { ShowListGameCount=true; RemoveMissingEmulatorGames=true; SkipEmptyLists=true; LeftStickSpeed=5; RightStickSpeed=5; VerticalListSwitch="off"; ButtonPrompts = "PlayStation"; ShowGameTitle = true; ShowCollectionName = true; OpenMonitor = "cursor"; DefaultCollectionId="remember"; CarouselScale=1; CarouselLayout="angled"; AngledPanelSizing="fixed"; GridColumns=5; GridRows=2; EpicEnabled=true; GogEnabled=true; EaEnabled=true; UbisoftEnabled=true; RockstarEnabled=true; SteamGridDbEnabled=true; }
     }
     public static class Prompts {
         public static string Style(Settings settings) {

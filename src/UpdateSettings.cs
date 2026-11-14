@@ -16,6 +16,7 @@ namespace PadLauncher {
         string pendingUpdatePayload;
         AppRelease pendingUpdateRelease;
         void AddUpdateSettings(StackPanel panel) {
+            if(TestEnvironment.EmulatorDetection) {panel.Children.Add(Label("App updates are disabled in the emulator detection test.",12,muted)); return;}
             var heading=Label("Updates",18,white); heading.Margin=new Thickness(0,24,0,8); panel.Children.Add(heading);
             panel.Children.Add(Label("Installed version: "+AppUpdates.DisplayVersion,12,muted));
             var auto=new CheckBox {Content="Automatically download and install updates",IsChecked=settings.AutoUpdate,Margin=new Thickness(0,12,0,8)};
@@ -38,7 +39,7 @@ namespace PadLauncher {
             if(installUpdateButton!=null) {installUpdateButton.IsEnabled=!updateBusy; installUpdateButton.Visibility=availableUpdate==null ? Visibility.Collapsed : Visibility.Visible;}
         }
         async void StartAutomaticUpdates() {
-            if(automaticUpdateStarted || demo || preview || !settings.AutoUpdate) return;
+            if(automaticUpdateStarted || demo || preview || TestEnvironment.EmulatorDetection || !settings.AutoUpdate) return;
             automaticUpdateStarted=true;
             try {
                 while(settings.AutoUpdate && !exiting) {

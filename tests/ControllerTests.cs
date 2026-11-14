@@ -45,7 +45,9 @@ public static class ControllerTests {
             Check(!repeat.Update(1,false,82,7,4) && repeat.Update(1,false,83,7,4),"Configured left stick multiplier changes repeat timing");
             repeat.Reset(); repeat.Update(1,true,0,7,4); repeat.CompleteMove(0);
             Check(!repeat.Update(1,true,47,7,4) && repeat.Update(1,true,48,7,4),"Right stick timing remains independent from the left stick multiplier");
-            Check(new Settings().LeftStickSpeed==1,"Existing configuration defaults to 1x left stick speed");
+            Check(new Settings().LeftStickSpeed==5 && new Settings().RightStickSpeed==5,"Both sticks default to 5x speed");
+            var savedSpeeds=Storage.Json().Deserialize<Settings>("{\"LeftStickSpeed\":2,\"RightStickSpeed\":3}");
+            Check(savedSpeeds.LeftStickSpeed==2 && savedSpeeds.RightStickSpeed==3,"Explicitly saved stick speeds survive the default change");
             var listSettings=new Settings();
             Check(!ControllerNavigation.ListSwitchEnabled(listSettings) && ControllerNavigation.ListDirection(new PadState {Buttons=1},listSettings)==0,"Up/down list switching is opt-in for existing settings");
             listSettings.VerticalListSwitch="dpad";

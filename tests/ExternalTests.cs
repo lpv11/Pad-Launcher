@@ -144,7 +144,7 @@ class ExternalTests {
             var featureLibrary=new Library {Games=new List<Game>{new Game {Id="steam:one",Name="Steam",LastPlayed=200},new Game {Id="epic:one",Name="Epic"},new Game {Id="custom:none",Name="Unplayed"}}};
             var recent=CombinedCollections.Options(featureLibrary,featureSettings).Single(c => c.Id=="recent");
             Check(recent.Games.SequenceEqual(new[]{"epic:one","steam:one"}),"Recent collection merges local launch history and Steam history in newest-first order");
-            Check(featureSettings.RightStickSpeed==3,"Existing settings default to 3x right stick speed");
+            Check(featureSettings.RightStickSpeed==5,"Settings without a saved speed default to 5x right stick speed");
             Check(StartupSetting.Command(Path.Combine(root,"Folder with spaces","Launcher.exe")).StartsWith("\"") && StartupSetting.Command(Path.Combine(root,"Folder with spaces","Launcher.exe")).EndsWith("\""),"Windows startup executable path is quoted");
             byte[] coverBytes;
             using(var cover=new System.Drawing.Bitmap(600,900)) using(var stream=new MemoryStream()) {cover.Save(stream,System.Drawing.Imaging.ImageFormat.Png); coverBytes=stream.ToArray();}
