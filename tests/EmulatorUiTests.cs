@@ -25,10 +25,11 @@ class EmulatorUiTests {
         var boxes=ImportChildren(content).OfType<CheckBox>().Where(box => box.Content is StackPanel).ToList();
         var added=boxes.Where(box => ((StackPanel)box.Content).Children.OfType<TextBlock>().Any(text => text.Text.Contains("already added"))).ToList();
         var selected=boxes.Select(box => box.IsChecked).ToArray();
-        Check(button!=null && added.Count==expectedAdded,"Import review identifies the already-added rows for filtering");
+        Check(button!=null && button.Visibility==Visibility.Visible && added.Count==expectedAdded,"Import review shows its filter only after game rows are available");
         var note=(TextBlock)Find(content,"ImportNoDuplicatesNote");
         Check(note!=null && note.Text.Contains("without creating duplicates") && ((SolidColorBrush)note.Foreground).Color==Color.FromRgb(255,218,106),"Import review explains duplicate prevention in yellow");
         button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Check(button.Visibility==Visibility.Visible,"The filter remains available when all already-added rows are hidden");
         Check(added.All(box => box.Visibility==Visibility.Collapsed) && boxes.Except(added).All(box => box.Visibility==Visibility.Visible),"Hide already added collapses existing rows and retains new games");
         Check(boxes.Select(box => box.IsChecked).SequenceEqual(selected),"Hiding existing games preserves their selection and import state");
         button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
@@ -44,6 +45,7 @@ class EmulatorUiTests {
             var wizardContent=(FrameworkElement)wizard.Content;
             var review=(Button)Find(wizardContent,"ReviewEmulatorImportGames"); var commit=(Button)Find(wizardContent,"CommitEmulatorImport");
             if(stage==0 && review!=null && review.IsEnabled) {
+                Check(ImportChildren(wizardContent).OfType<Button>().Single(button => button.Name=="HideAddedEmulatorImportGames").Visibility==Visibility.Collapsed,"Individual import hides the game filter before reviewing sources");
                 if(update) {
                     var saved=(ComboBox)Find(wizardContent,"SavedEmulatorImport"); if(saved==null || saved.Items.Count<2) {wizard.Close(); return;}
                     stage=1; saved.SelectedIndex=1; return;
@@ -78,6 +80,7 @@ class EmulatorUiTests {
             var statusLabel=Find(wizardContent,"EmulatorImportAllStatus") as TextBlock;
             var allLoaded=statusLabel!=null && (statusLabel.Text.StartsWith("Sources loaded") || statusLabel.Text.StartsWith("No import sources"));
             if(stage==0 && review!=null && review.IsEnabled && allLoaded) {
+                Check(ImportChildren(wizardContent).OfType<Button>().Single(button => button.Name=="HideAddedEmulatorImportAllGames").Visibility==Visibility.Collapsed,"Bulk import hides the game filter before reviewing sources");
                 Check(Find(wizardContent,"ImportAllLocation_retroarch")!=null && Find(wizardContent,"ImportAllLocation_duckstation")!=null,"Import all wizard lists every configured emulator");
                 var duckLocation=(TextBox)Find(wizardContent,"ImportAllLocation_duckstation"); var duckLoad=(Button)Find(wizardContent,"ImportAllLoadSources_duckstation");
                 if(duckLocation!=null && duckLoad!=null) {

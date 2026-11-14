@@ -79,7 +79,7 @@ namespace PadLauncher {
             var reviewArea=new DockPanel(); root.Children.Add(reviewArea);
             var selectionBar=new StackPanel {Orientation=Orientation.Horizontal,Margin=new Thickness(0,0,0,6),Visibility=Visibility.Collapsed}; DockPanel.SetDock(selectionBar,Dock.Top); reviewArea.Children.Add(selectionBar);
             var all=new Button {Content="Select all games",Padding=new Thickness(12,7,12,7)}; selectionBar.Children.Add(all);
-            var hideAdded=new Button {Name="HideAddedEmulatorImportGames",Content="Hide already added games",Padding=new Thickness(12,7,12,7),Margin=new Thickness(8,0,0,0)}; selectionBar.Children.Add(hideAdded);
+            var hideAdded=new Button {Name="HideAddedEmulatorImportGames",Content="Hide already added games",Padding=new Thickness(12,7,12,7),Margin=new Thickness(8,0,0,0),Visibility=Visibility.Collapsed}; selectionBar.Children.Add(hideAdded);
             var count=Label("",12,muted); count.Name="EmulatorImportSelectionCount"; count.Margin=new Thickness(12,0,0,0); selectionBar.Children.Add(count);
             var gameRows=new StackPanel(); reviewArea.Children.Add(new ScrollViewer {Content=gameRows,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled});
             var hiddenNotice=Label("All reviewed games are already added. Hidden entries keep their selection.",12,muted); hiddenNotice.Name="EmulatorImportHiddenNotice"; hiddenNotice.TextWrapping=TextWrapping.Wrap; hiddenNotice.Visibility=Visibility.Collapsed;
@@ -113,6 +113,7 @@ namespace PadLauncher {
             Action refreshDestination=() => {bool newList=String.IsNullOrEmpty(destination.SelectedValue as string); separate.IsEnabled=newList && reviewedSources.Count>1; separate.Visibility=separate.IsEnabled ? Visibility.Visible : Visibility.Collapsed; listName.Visibility=newList && !(separate.IsEnabled && separate.IsChecked==true) ? Visibility.Visible : Visibility.Collapsed; listCaption.Visibility=listName.Visibility;};
             destination.SelectionChanged+=(s,e) => refreshDestination(); separate.Click+=(s,e) => refreshDestination(); refreshDestination();
             Action updateCount=() => {
+                hideAdded.Visibility=gameBoxes.Count>0 ? Visibility.Visible : Visibility.Collapsed;
                 foreach(var box in gameBoxes.Values) box.Visibility=hideAlreadyAdded && addedBoxes.Contains(box) ? Visibility.Collapsed : Visibility.Visible;
                 foreach(var group in groupRows) group.Key.Visibility=group.Value.Any(box => box.Visibility==Visibility.Visible) ? Visibility.Visible : Visibility.Collapsed;
                 int selected=gameBoxes.Values.Count(b => b.IsChecked==true),hidden=gameBoxes.Values.Count(b => b.Visibility==Visibility.Collapsed);
@@ -255,7 +256,7 @@ namespace PadLauncher {
             var review=new Button {Name="ReviewEmulatorImportAll",Content="Review selected sources",Padding=new Thickness(12,7,12,7),IsEnabled=false}; actionRow.Children.Add(review);
             var selectAll=new Button {Name="SelectAllEmulatorImportSources",Content="Select all sources",Padding=new Thickness(12,7,12,7),Margin=new Thickness(8,0,0,0)}; actionRow.Children.Add(selectAll);
             bool hideAlreadyAdded=false;
-            var hideAdded=new Button {Name="HideAddedEmulatorImportAllGames",Content="Hide already added games",Padding=new Thickness(12,7,12,7),Margin=new Thickness(8,0,0,0),ToolTip="Filters the review list only. Hidden entries keep their selection."}; actionRow.Children.Add(hideAdded);
+            var hideAdded=new Button {Name="HideAddedEmulatorImportAllGames",Content="Hide already added games",Padding=new Thickness(12,7,12,7),Margin=new Thickness(8,0,0,0),ToolTip="Filters the review list only. Hidden entries keep their selection.",Visibility=Visibility.Collapsed}; actionRow.Children.Add(hideAdded);
 
             var count=Label("",12,muted); count.Name="ImportAllSelectionCount"; count.Margin=new Thickness(12,0,0,0); actionRow.Children.Add(count);
             var status=Label("Finding import sources…",12,muted); status.Name="EmulatorImportAllStatus"; status.TextWrapping=TextWrapping.Wrap; status.Margin=new Thickness(0,0,0,10); content.Children.Add(status);
@@ -269,6 +270,7 @@ namespace PadLauncher {
             Func<int> selectedGames=() => entries.Sum(en => en.gameBoxes.Values.Count(box => box.IsChecked==true));
             Func<int> selectedSources=() => entries.Sum(en => en.sourceBoxes.Values.Count(box => box.IsChecked==true));
             Action updateCount=() => {
+                hideAdded.Visibility=entries.Any(entry => entry.gameBoxes.Count>0) ? Visibility.Visible : Visibility.Collapsed;
                 foreach(var entry in entries) {
                     foreach(var box in entry.gameBoxes.Values) box.Visibility=hideAlreadyAdded && entry.addedBoxes.Contains(box) ? Visibility.Collapsed : Visibility.Visible;
                     foreach(var group in entry.groupRows) group.Key.Visibility=group.Value.Any(box => box.Visibility==Visibility.Visible) ? Visibility.Visible : Visibility.Collapsed;
